@@ -1,0 +1,109 @@
+// Tails a session's transcript JSONL for token usage + activity. The format
+// is Claude Code-internal — every field access is defensive.
+
+import fs from 'node:fs';
+
+export function startTranscriptTail({ store, sessionId, transcriptPath, onInterrupt }) {
+  let offset = 0;
+  let reading = false;
+
+  function harvest(line) {
+    let obj;
+    try { obj = JSON.parse(line); } catch { return; }
+
+    // Permission mode is its own record type — {type, permissionMode,
+    // sessionId} and nothing else. Claude Code writes one near the top of the
+    // transcript and again on every change, so tailing it is how the device
+    // learns which mode a window is in; the session registry carries no such
+    // field. Returns early because the record has no message to harvest.
+    if (obj.type === 'permission-mode' && obj.permissionMode) {
+      store.upsert(sessionId, { permissionMode: String(obj.permissionMode) });
+      return;
+    }
+
+    // One upsert per line, not one per field. Every upsert fans out through
+    // the store's emit path, and a busy transcript writes several lines a
+    // second — five upserts per line multiplied into the event flood that
+    // stuttered the device.
+    const fields = {};
+    const msg = obj.message || obj;
+    const usage = msg.usage || obj.usage;
+    if (usage) {
+      const raw = store.raw(sessionId) || {};
+      // What a turn sent is what the window currently holds, so the newest
+      // turn's prompt size *is* the context occupancy — an overwrite, not a
+      // sum. The lifetime counters below are the opposite arithmetic on the
+      // same numbers.
+      fields.contextTokens = (usage.input_tokens || 0) +
+        (usage.cache_read_input_tokens || 0) +
+        (usage.cache_creation_input_tokens || 0);
+      // Cache reads are counted separately: summing them across every turn
+      // reaches tens of millions and drowns out the real numbers.
+      fields.tokensIn = (raw.tokensIn || 0) + (usage.input_tokens || 0) +
+        (usage.cache_creation_input_tokens || 0);
+      fields.tokensOut = (raw.tokensOut || 0) + (usage.output_tokens || 0);
+      fields.cacheRead = (raw.cacheRead || 0) + (usage.cache_read_input_tokens || 0);
+    }
+    if (msg.model) fields.model = msg.model;
+    // Assistant records carry the turn's reasoning effort at the top level
+    // ("low" … "max", "ultrathink"). The device runs the working mascot's gait
+    // off it; pass the string through and let the device whitelist.
+    if (typeof obj.effort === 'string' && obj.effort) fields.effort = obj.effort;
+
+    // last assistant text snippet
+    const content = msg.content;
+    if (Array.isArray(content)) {
+      const text = content.filter((c) => c && c.type === 'text' && c.text).map((c) => c.text).join(' ');
+      if (text) fields.lastMessage = text.slice(0, 200);
+      // Esc in the terminal kills any open dialog but fires no hook at all —
+      // no PostToolUse, no Stop. The transcript's interrupt marker is the only
+      // signal that a pending ask just died, so it is surfaced with the line's
+      // own timestamp: catch-up replays old markers, and the consumer needs
+      // the time to tell a stale marker from a live Esc.
+      if (onInterrupt && text.startsWith('[Request interrupted')) {
+        const ts = Date.parse(obj.timestamp || msg.timestamp || '');
+        onInterrupt(Number.isNaN(ts) ? Date.now() : ts);
+      }
+    }
+    if (obj.timestamp || msg.timestamp) {
+      const ts = Date.parse(obj.timestamp || msg.timestamp);
+      if (!Number.isNaN(ts)) fields.lastActivityTs = ts;
+    }
+    if (Object.keys(fields).length) store.upsert(sessionId, fields);
+  }
+
+  function readNew() {
+    if (reading) return;
+    reading = true;
+    fs.stat(transcriptPath, (err, st) => {
+      if (err || st.size <= offset) { reading = false; return; }
+      const stream = fs.createReadStream(transcriptPath, { start: offset, end: st.size - 1 });
+      let buf = '';
+      stream.on('data', (c) => { buf += c.toString('utf8'); });
+      stream.on('end', () => {
+        offset = st.size;
+        const lines = buf.split('\n');
+        for (const line of lines) if (line.trim()) harvest(line);
+        reading = false;
+      });
+      stream.on('error', () => { reading = false; });
+    });
+  }
+
+  // catch up from the start so tokens reflect the whole session
+  readNew();
+  let watcher = null;
+  try {
+    watcher = fs.watch(transcriptPath, readNew);
+  } catch {
+    // file may not exist yet; poll until it does
+  }
+  const poll = setInterval(readNew, 3_000);
+
+  return {
+    stop: () => {
+      clearInterval(poll);
+      if (watcher) watcher.close();
+    },
+  };
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "catalog.v1",
+  "updated_at": "2026-08-02T20:52:40Z",
+  "repo": {
+    "name": "claude-thing",
+    "description": "Claude Code on a Spotify Car Thing.",
+    "homepage": "https://github.com/jstgnkl/bridgething-claude",
+    "icon": "https://raw.githubusercontent.com/jstgnkl/bridgething-claude/main/public/icon.svg"
+  },
+  "apps": [
+    {
+      "id": "019fc370-45e1-7659-8a89-2eb32125d2db",
+      "name": "Claude",
+      "description": "Claude Code sessions, queue and usage on the Car Thing",
+      "author": "jstgnkl",
+      "icon": "https://raw.githubusercontent.com/jstgnkl/bridgething-claude/main/public/icon.svg",
+      "homepage": "https://github.com/jstgnkl/bridgething-claude",
+      "source": "https://github.com/jstgnkl/bridgething-claude",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "released_at": "2026-08-02T20:52:40Z",
+          "download": {
+            "url": "https://raw.githubusercontent.com/jstgnkl/bridgething-claude/main/docs/claude-thing-bridgething-v0.1.0.zip",
+            "size": 71718,
+            "sha256": "6d2ac09c5b7d617f1c8b026d14623513e380422070f703c6a595f322e4cae049"
+          },
+          "permissions": [],
+          "min_libbridgething_version": "0.8.0",
+          "changelog": "Initial release. Claude Code sessions, the human-input queue, and live usage limits on the Car Thing, with permission approve/deny from the dial. Needs the Mac daemon from the repo."
+        }
+      ]
+    }
+  ],
+  "recommended_sources": []
+}

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Installed to ~/Library/LaunchAgents/com.claudething.tunnel.plist by
+     mac/install.sh, which substitutes __ROOT__. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.claudething.tunnel</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__ROOT__/mac/tunnel.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__ROOT__</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Unconditional, unlike the daemon's KeepAlive. tunnel.sh exists to die:
+       unplug the USB cable, reboot the device, or kill sshd and it exits — on
+       any exit status. launchd brings it back ThrottleInterval seconds later,
+       and the app's own exponential backoff covers the gap. -->
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>__ROOT__/logs/tunnel.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__ROOT__/logs/tunnel.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

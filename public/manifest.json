@@ -1,0 +1,10 @@
+{
+  "id": "019fc370-45e1-7659-8a89-2eb32125d2db",
+  "name": "Claude",
+  "version": "0.1.0",
+  "description": "Claude Code sessions, queue and usage on the Car Thing",
+  "icon": "icon.svg",
+  "config": [],
+  "permissions": [],
+  "art": { "heroPx": 248, "thumbPx": 96 }
+}

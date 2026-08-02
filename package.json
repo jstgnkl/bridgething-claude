@@ -1,0 +1,20 @@
+{
+  "name": "claude-thing",
+  "private": true,
+  "version": "0.1.0",
+  "license": "GPL-3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "push": "bun scripts/push.ts",
+    "share": "bun scripts/share.ts",
+    "release": "bun scripts/release.ts",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "devDependencies": {
+    "@msgpack/msgpack": "^3.1.3",
+    "fflate": "^0.8.2",
+    "vite": "^7.1.13"
+  }
+}
