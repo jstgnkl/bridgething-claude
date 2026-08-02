@@ -4,6 +4,31 @@ Turn a Spotify Car Thing into a desk monitor for Claude Code: every session at a
 glance, a queue of everything waiting on you, live usage bars, and permission
 approve/deny from the dial.
 
+<img src="docs/screenshots/sessions.png" alt="The sessions grid: three session tiles showing state, model and context fill, one flagged ATTENTION" width="100%">
+
+<details>
+<summary><b>More screens</b> — queue, permission prompt, usage, ambient clock</summary>
+<br>
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/queue.png" alt="The queue: a permission request card with ALLOW and DENY buttons" width="100%"></td>
+<td width="50%"><img src="docs/screenshots/permission.png" alt="A permission request filling the screen, showing the full bash command with allow, deny and skip" width="100%"></td>
+</tr>
+<tr>
+<td><sub><b>Queue</b> — everything waiting on a human, newest filling the screen.</sub></td>
+<td><sub><b>Permission</b> — the real prompt. The dial answers it.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/usage.png" alt="The usage screen: session and weekly limit bars with reset times, plus skills and subagents tables" width="100%"></td>
+<td width="50%"><img src="docs/screenshots/ambient.png" alt="The ambient clock reading 10:16 PM with NOTHING BLOCKED and a sleeping mascot" width="100%"></td>
+</tr>
+<tr>
+<td><sub><b>Usage</b> — real session and weekly limits, with reset times.</sub></td>
+<td><sub><b>Ambient</b> — the clock, when nothing needs you.</sub></td>
+</tr>
+</table>
+</details>
+
 ---
 
 ## What you'll need
