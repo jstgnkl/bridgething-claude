@@ -18,6 +18,13 @@ import { log } from './log.js';
 
 const SESSIONS_DIR = path.join(CLAUDE_DIR, 'sessions');
 
+// Pause between keys of a typed sequence, in seconds. Long enough for Claude
+// Code's dialog to advance to the next question before the next digit lands.
+const KEY_GAP_S = 0.15;
+
+// The non-printing keys a question dialog needs, as System Events key codes.
+const KEY_CODES = { return: 36, tab: 48 };
+
 function osa(script, timeout = 5000) {
   return new Promise((resolve) => {
     execFile('osascript', ['-e', script], { timeout }, (err, stdout, stderr) => {
@@ -128,6 +135,24 @@ end tell`;
 export function createFocus() {
   let automationDenied = false;   // sticky: a denied TCC row never re-prompts
 
+  // There is one keyboard and one frontmost window, so there can be one of
+  // these at a time. Nothing else enforces it: the hub handles every socket
+  // frame in its own task, so two answers arriving close together used to run
+  // their focus-then-type concurrently and interleave keystrokes into whatever
+  // window happened to be in front — digits meant for one session landing in
+  // another's terminal.
+  //
+  // Anything that raises a window or types must run inside this, and a
+  // focus-then-type pair must be ONE call to it: a bare focus slipping between
+  // the two halves is the same bug.
+  let chain = Promise.resolve();
+  function exclusive(fn) {
+    const run = chain.then(() => fn());
+    // The chain must survive a failed turn, so it tracks completion, not result.
+    chain = run.then(() => {}, () => {});
+    return run;
+  }
+
   async function focusSession(sessionId) {
     const rec = lookupSession(sessionId);
     if (!rec) return { focused: false, reason: 'no session registry entry' };
@@ -197,5 +222,43 @@ export function createFocus() {
     return { typed: false, reason: r.error };
   }
 
-  return { focusSession, typeKey, lookupSession };
+  // Types a whole sequence into the focused window in ONE osascript call.
+  // One call on purpose: a multi-question dialog needs several keys landing in
+  // the same window, and re-invoking osascript per key opens a gap where focus
+  // can move and half the answer lands somewhere else.
+  //
+  // A key is either a single character (sent as `keystroke`) or one of the
+  // named non-printing keys below. The delay between keys is what lets the TUI
+  // redraw and move to the next question before the following key arrives.
+  async function typeSequence(keys) {
+    if (automationDenied) return { typed: false, reason: 'automation denied' };
+    const lines = [];
+    for (const key of keys) {
+      if (lines.length) lines.push(`  delay ${KEY_GAP_S}`);
+      if (KEY_CODES[key] !== undefined) {
+        lines.push(`  key code ${KEY_CODES[key]}`);
+        continue;
+      }
+      const safe = String(key).slice(0, 1).replace(/["\\]/g, '');
+      if (!safe) return { typed: false, reason: 'nothing to type' };
+      lines.push(`  keystroke "${safe}"`);
+    }
+    if (!lines.length) return { typed: false, reason: 'nothing to type' };
+
+    const script = ['tell application "System Events"', ...lines, 'end tell'].join('\n');
+    const r = await osa(script, 3000 + keys.length * 400);
+    if (r.ok) return { typed: true };
+    if (r.denied) {
+      return {
+        typed: false,
+        reason: 'macOS denied Automation for System Events — allow it in System Settings › Privacy & Security › Automation',
+      };
+    }
+    return { typed: false, reason: r.error };
+  }
+
+  // focusSession/typeKey/typeSequence are the primitives and do NOT take the
+  // lock themselves — that would deadlock the focus-then-type pair, which has
+  // to hold it across both. Callers wrap them in exclusive().
+  return { exclusive, focusSession, typeKey, typeSequence, lookupSession };
 }

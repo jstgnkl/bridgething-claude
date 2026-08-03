@@ -156,6 +156,65 @@ test('a replayed interrupt marker older than the permission leaves it held', () 
   assert.equal(bridge.pendingCount(), 1);
 });
 
+test('a pre-approved call is released by its own PostToolUse, not left to time out', () => {
+  const { bridge, store, events } = setup();
+  const res = fakeRes();
+  bridge.onHookRequest(HOOK, res);
+  assert.equal(bridge.pendingCount(), 1);
+
+  assert.equal(bridge.releaseRan('sess-1', 'Bash', Date.now()), true);
+  assert.equal(bridge.pendingCount(), 0);
+  assert.equal(decisionOf(res), 'ask', 'decides nothing — the allowlist already did');
+  assert.equal(store.get('sess-1').pendingPermission, false);
+  const resolved = events.find((e) => e.topic === 'claude.permission.resolved');
+  assert.equal(resolved.data.resolution, 'preapproved');
+});
+
+test('releaseRan only touches the same session and the same tool', () => {
+  const { bridge } = setup();
+  bridge.onHookRequest(HOOK, fakeRes());
+  bridge.onHookRequest({ ...HOOK, session_id: 'sess-2' }, fakeRes());
+  bridge.onHookRequest({ ...HOOK, tool_name: 'Edit', tool_input: { file_path: '/tmp/a.js' } }, fakeRes());
+  assert.equal(bridge.pendingCount(), 3);
+
+  assert.equal(bridge.releaseRan('sess-1', 'Write', Date.now()), false, 'wrong tool releases nothing');
+  assert.equal(bridge.releaseRan('sess-3', 'Bash', Date.now()), false, 'wrong session releases nothing');
+  assert.equal(bridge.pendingCount(), 3);
+
+  assert.equal(bridge.releaseRan('sess-1', 'Bash', Date.now()), true);
+  assert.equal(bridge.pendingCount(), 2, 'the other session and the other tool stay held');
+});
+
+test('releaseRan frees the oldest hold, so a genuinely blocked later ask survives', () => {
+  const { bridge, events } = setup();
+  const first = fakeRes();
+  const second = fakeRes();
+  bridge.onHookRequest(HOOK, first);
+  bridge.onHookRequest({ ...HOOK, tool_input: { command: 'rm -rf /' } }, second);
+
+  bridge.releaseRan('sess-1', 'Bash', Date.now());
+  assert.equal(bridge.pendingCount(), 1, 'exactly one completion releases exactly one hold');
+  assert.equal(decisionOf(first), 'ask');
+  assert.equal(second.body, null, 'the later ask is still waiting for a human');
+  const released = events.filter((e) => e.topic === 'claude.permission.resolved');
+  assert.equal(released.length, 1);
+});
+
+test('a PostToolUse older than the hold leaves it held', () => {
+  const { bridge } = setup();
+  bridge.onHookRequest(HOOK, fakeRes());
+  assert.equal(bridge.releaseRan('sess-1', 'Bash', Date.now() - 60_000), false);
+  assert.equal(bridge.pendingCount(), 1);
+});
+
+test('releaseRan tolerates a missing session or tool', () => {
+  const { bridge } = setup();
+  bridge.onHookRequest(HOOK, fakeRes());
+  assert.equal(bridge.releaseRan(null, 'Bash', Date.now()), false);
+  assert.equal(bridge.releaseRan('sess-1', undefined, Date.now()), false);
+  assert.equal(bridge.pendingCount(), 1);
+});
+
 test('ExitPlanMode is never held — hook gets "ask" back, plan goes to the queue', () => {
   const planCalls = [];
   const { bridge, events } = setup({ onPlanApproval: (p) => planCalls.push(p) });

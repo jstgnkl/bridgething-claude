@@ -81,3 +81,28 @@ test('a prompt is kept as lastPrompt, collapsed and capped, for ask intent lines
   assert.ok(kept.startsWith('reinstall the deps'), 'whitespace collapsed');
   assert.equal(kept.length, 120, 'capped for a single 800px line');
 });
+
+test('PostToolUse releases a permission still held for the same call', () => {
+  const store = createStore();
+  const calls = [];
+  const { onHookEvent } = startHooksSource({
+    store,
+    permissionBridge: { releaseRan: (...args) => (calls.push(args), true) },
+  });
+  onHookEvent('SessionStart', { session_id: 'pre-1', cwd: '/Users/dev/proj' });
+  onHookEvent('PreToolUse', { session_id: 'pre-1', cwd: '/Users/dev/proj', tool_name: 'Bash' });
+  onHookEvent('PostToolUse', { session_id: 'pre-1', cwd: '/Users/dev/proj', tool_name: 'Bash' });
+
+  assert.equal(calls.length, 1, 'exactly one release attempt, on PostToolUse only');
+  assert.equal(calls[0][0], 'pre-1');
+  assert.equal(calls[0][1], 'Bash');
+  assert.ok(typeof calls[0][2] === 'number', 'carries the completion timestamp');
+});
+
+test('a daemon built without a permission bridge still ingests PostToolUse', () => {
+  const store = createStore();
+  const { onHookEvent } = startHooksSource({ store });
+  onHookEvent('SessionStart', { session_id: 'nb-1', cwd: '/Users/dev/proj' });
+  onHookEvent('PostToolUse', { session_id: 'nb-1', cwd: '/Users/dev/proj', tool_name: 'Bash' });
+  assert.equal(store.get('nb-1').currentTool, null, 'no throw, tool cleared as usual');
+});

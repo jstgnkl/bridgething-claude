@@ -134,6 +134,36 @@ export function createPermissionBridge({ emit, store, queue }) {
     }
   }
 
+  // A pre-approved tool call still fires PermissionRequest, but as a
+  // notification: the allowlist (or an accepting permission mode) already
+  // decided, Claude Code does not wait for the answer, and nothing on this end
+  // will ever supply one. The card sat on the device for the full
+  // PERMISSION_HOLD_MS demanding a decision that had already been made — ten
+  // minutes of unanswerable cards for anyone whose own session runs allowlisted
+  // tools, which is every session working on this repo.
+  //
+  // PostToolUse is the proof. A gated call cannot complete before its
+  // permission resolves, so a PostToolUse arriving while one is still held for
+  // the same session and tool means that call was never gated. Release the
+  // oldest such hold — one completion is one call, and a genuinely blocked ask
+  // is always the later of the two, since the block stops anything else from
+  // starting. "ask" decides nothing, which is the only safe answer to give a
+  // caller that stopped listening.
+  function releaseRan(sessionId, toolName, ts) {
+    if (!sessionId || !toolName) return false;
+    let oldestId = null;
+    let oldestTs = Infinity;
+    for (const [id, p] of pending) {
+      if (p.sessionId !== sessionId || p.tool !== toolName) continue;
+      if (p.createdTs > ts) continue;
+      if (p.createdTs < oldestTs) {
+        oldestTs = p.createdTs;
+        oldestId = id;
+      }
+    }
+    return oldestId ? finish(oldestId, 'preapproved', 'ask') : false;
+  }
+
   // Pending permissions as queue entries, for clients that connect late.
   function list() {
     return [...pending.entries()].map(([id, p]) => ({
@@ -149,5 +179,5 @@ export function createPermissionBridge({ emit, store, queue }) {
     })).sort((a, b) => a.createdTs - b.createdTs);
   }
 
-  return { onHookRequest, answer, cancelSession, list, pendingCount: () => pending.size };
+  return { onHookRequest, answer, cancelSession, releaseRan, list, pendingCount: () => pending.size };
 }

@@ -25,7 +25,7 @@ export function createSources({ store, permissionBridge, queue }) {
     active.push({ name: 'mock', handle: startMockSource({ store, permissionBridge, queue }) });
   } else {
     active.push({ name: 'poller', handle: startPollerSource({ store }) });
-    hooks = startHooksSource({ store, queue });
+    hooks = startHooksSource({ store, queue, permissionBridge });
     active.push({ name: 'hooks', handle: hooks });
     // Esc fires no hook, so this is the only path that retires asks and tile
     // flags for an interrupted turn.

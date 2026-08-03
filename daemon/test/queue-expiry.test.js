@@ -15,9 +15,16 @@ function setup(focusResult = { focused: true, exact: false, app: 'Terminal' }) {
   const store = createStore();
   store.touch('sess-1', { name: 'my-project' });
   const calls = { typed: [] };
+  let chain = Promise.resolve();
   const focus = {
+    exclusive(fn) {
+      const run = chain.then(() => fn());
+      chain = run.then(() => {}, () => {});
+      return run;
+    },
     async focusSession() { return focusResult; },
     async typeKey(ch) { calls.typed.push(ch); return { typed: true }; },
+    async typeSequence(keys) { for (const k of keys) calls.typed.push(k); return { typed: true }; },
   };
   const queue = createQueue({ emit: (topic, data) => events.push({ topic, data }), store, focus });
   return { queue, events, calls };

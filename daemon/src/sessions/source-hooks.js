@@ -7,7 +7,7 @@ import { isOwnSession } from '../own-sessions.js';
 import { lookupSession } from '../focus.js';
 import { log } from '../log.js';
 
-export function startHooksSource({ store, queue }) {
+export function startHooksSource({ store, queue, permissionBridge }) {
   function onHookEvent(event, payload) {
     const id = payload.session_id;
     if (!id || isOwnSession(id)) return;
@@ -75,6 +75,12 @@ export function startHooksSource({ store, queue }) {
         break;
       case 'PostToolUse':
         store.touch(id, { ...base, currentTool: null });
+        // The call finished, so any permission still held for it was never
+        // gating anything — a pre-approved call's PermissionRequest is a
+        // notification, not a question. See permission-bridge.releaseRan.
+        if (permissionBridge && permissionBridge.releaseRan) {
+          permissionBridge.releaseRan(id, payload.tool_name, Date.now());
+        }
         // ExitPlanMode completing means the plan dialog was answered — the
         // plan ask came in through the permission bridge, but resolves here.
         if (queue && (payload.tool_name === 'AskUserQuestion' || payload.tool_name === 'ExitPlanMode')) {
